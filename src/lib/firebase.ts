@@ -8,7 +8,7 @@ const firebaseConfig = {
   projectId: 'global-dating-chat',
   appId: '1:832138420938:web:fecc2d42cf58404fee4a33',
   storageBucket: 'global-dating-chat.firebasestorage.app',
-  apiKey: 'AIzaSyA-K31RFSrWNTJlBl6JjmWIsXBtxJ1ZSFY',
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: 'global-dating-chat.firebaseapp.com',
   measurementId: '',
   messagingSenderId: '832138420938',
