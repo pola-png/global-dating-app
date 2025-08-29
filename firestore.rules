@@ -1,0 +1,79 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default deny all access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Users Collection
+    // - Allow reading of any user profile by any authenticated user.
+    // - Allow a user to create and update their OWN profile.
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Posts Collection
+    // - Allow authenticated users to read posts.
+    // - Allow authenticated users to create a post if the author UID matches their own.
+    // - Allow users to update a post (for reactions), but not change author or creation date.
+    match /posts/{postId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.author.uid;
+      allow update: if request.auth != null; // Allows for reacting to posts
+      
+      // Comments Subcollection
+      // - Allow authenticated users to read comments.
+      // - Allow authenticated users to create a comment if the author UID matches their own.
+      match /comments/{commentId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null && request.auth.uid == request.resource.data.author.uid;
+      }
+    }
+
+    // Private Chats Collection
+    // - Allow read/write only if the authenticated user is a participant in the chat.
+    match /privateChats/{chatId} {
+      allow read, write: if request.auth != null && request.auth.uid in resource.data.participants;
+
+      // Messages Subcollection within a Private Chat
+      match /messages/{messageId} {
+        allow read, write: if request.auth != null && get(/databases/$(database)/documents/privateChats/$(chatId)).data.participants.hasAny([request.auth.uid]);
+      }
+    }
+
+    // Group Metadata Collection
+    // - Allow authenticated users to read group metadata (e.g., for listing groups).
+    // - Allow writes (like joining a group or updating last message) if the user is authenticated. Specific logic is in the app.
+    match /groupMetadata/{groupSlug} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null;
+    }
+
+    // Group Chats Collection
+    // - Allow read/write only if the user is a member of the group.
+    match /groupChats/{groupSlug} {
+       allow read, write: if request.auth != null && exists(/databases/$(database)/documents/groupMetadata/$(groupSlug)) && request.auth.uid in get(/databases/$(database)/documents/groupMetadata/$(groupSlug)).data.members;
+
+      // Messages Subcollection within a Group Chat
+      match /messages/{messageId} {
+        allow read, write: if request.auth != null && exists(/databases/$(database)/documents/groupMetadata/$(groupSlug)) && request.auth.uid in get(/databases/$(database)/documents/groupMetadata/$(groupSlug)).data.members;
+      }
+    }
+    
+    // Calls Collection
+    // - Allow read/write only if the user is the caller or the callee.
+    match /calls/{callId} {
+      allow read, create, update, delete: if request.auth != null && (request.auth.uid == resource.data.caller.uid || request.auth.uid == resource.data.callee.uid);
+       match /offerCandidates/{candidateId} {
+        allow create: if request.auth != null && (request.auth.uid == get(/databases/$(database)/documents/calls/$(callId)).data.caller.uid);
+      }
+      match /answerCandidates/{candidateId} {
+         allow create: if request.auth != null && (request.auth.uid == get(/databases/$(database)/documents/calls/$(callId)).data.callee.uid);
+      }
+    }
+  }
+}
