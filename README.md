@@ -5,9 +5,7 @@ Your code is ready to be deployed. To push the latest changes to your GitHub rep
 ```bash
 git add .
 git commit -m "Implement infinite scroll for the main feed"
-git push origin main
+git push --force origin main
 ```
 
 After pushing, you can monitor the deployment progress in your AWS Amplify console.
-
-
