@@ -63,38 +63,41 @@ export default function HomePage() {
   }, [currentUser, authLoading, router]);
 
   const loadMorePosts = useCallback(async () => {
-    if (!hasMore || postsLoadingMore) return;
-
+    if (postsLoadingMore) return;
+  
     setPostsLoadingMore(true);
     
     try {
-        const postsRef = collection(firestore, 'posts');
-        let q;
-        if (lastPost) {
-            q = query(postsRef, orderBy('createdAt', 'desc'), startAfter(lastPost), limit(POSTS_PER_PAGE));
-        } else {
-             // This case is handled by initial load, but included for robustness
-            q = query(postsRef, orderBy('createdAt', 'desc'), limit(POSTS_PER_PAGE));
-        }
-        
-        const querySnapshot = await getDocs(q);
-        const newPostIds = querySnapshot.docs.map(doc => doc.id);
-
-        if (newPostIds.length > 0) {
-            setPostIds(prev => [...prev, ...newPostIds]);
-            setLastPost(querySnapshot.docs[querySnapshot.docs.length - 1]);
-        }
-        
-        if (querySnapshot.docs.length < POSTS_PER_PAGE) {
-            setHasMore(false);
-        }
-
+      const postsRef = collection(firestore, 'posts');
+      let q;
+      // If lastPost is null, it means we should start from the beginning.
+      // This happens on the initial load and when the feed loops.
+      if (lastPost) {
+        q = query(postsRef, orderBy('createdAt', 'desc'), startAfter(lastPost), limit(POSTS_PER_PAGE));
+      } else {
+        q = query(postsRef, orderBy('createdAt', 'desc'), limit(POSTS_PER_PAGE));
+      }
+      
+      const querySnapshot = await getDocs(q);
+      const newPostIds = querySnapshot.docs.map(doc => doc.id).filter(id => !postIds.includes(id));
+  
+      if (newPostIds.length > 0) {
+        setPostIds(prev => [...prev, ...newPostIds]);
+        setLastPost(querySnapshot.docs[querySnapshot.docs.length - 1]);
+      }
+      
+      // If we fetched fewer posts than the page limit, it means we've reached the end of the collection.
+      // To make the feed loop, we reset lastPost to null so the next fetch starts from the beginning.
+      if (querySnapshot.docs.length < POSTS_PER_PAGE) {
+        setLastPost(null); 
+      }
+  
     } catch (error) {
-        console.error("Error loading more posts:", error);
+      console.error("Error loading more posts:", error);
     } finally {
-        setPostsLoadingMore(false);
+      setPostsLoadingMore(false);
     }
-  }, [lastPost, hasMore, postsLoadingMore]);
+  }, [lastPost, postsLoadingMore, postIds]);
 
 
   useEffect(() => {
@@ -116,7 +119,7 @@ export default function HomePage() {
         
         setPostIds(postsData);
         setLastPost(querySnapshot.docs[querySnapshot.docs.length - 1]);
-        setHasMore(querySnapshot.docs.length === POSTS_PER_PAGE);
+        setHasMore(true); // Always true for infinite looping
         setPostsLoading(false);
       };
 
@@ -217,17 +220,14 @@ export default function HomePage() {
             )}
             {postIds.map((postId, index) => {
                 if (index === postIds.length - 1) {
-                    return <div ref={lastPostElementRef} key={postId}><PostCard postId={postId} currentUserId={currentUser.uid} /></div>
+                    return <div ref={lastPostElementRef} key={`${postId}-${index}`}><PostCard postId={postId} currentUserId={currentUser.uid} /></div>
                 }
-                return <div key={postId}><PostCard postId={postId} currentUserId={currentUser.uid} /></div>
+                return <div key={`${postId}-${index}`}><PostCard postId={postId} currentUserId={currentUser.uid} /></div>
             })}
              {postsLoadingMore && (
                 <div className="flex justify-center items-center p-4">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
-            )}
-             {!postsLoadingMore && !hasMore && postIds.length > 0 && (
-                <p className="text-center text-muted-foreground p-4">You've reached the end!</p>
             )}
           </div>
         </section>
