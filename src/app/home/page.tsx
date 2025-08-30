@@ -93,7 +93,7 @@ export default function HomePage() {
 
 
   useEffect(() => {
-    if (currentUser?.uid) {
+    if (currentUser?.uid && !authLoading) {
       const fetchInitialData = async () => {
         setPostsLoading(true);
         
@@ -112,7 +112,7 @@ export default function HomePage() {
       fetchInitialData();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.uid]);
+  }, [currentUser?.uid, authLoading]);
 
   const handleLogout = async () => {
     await signOut(auth);
