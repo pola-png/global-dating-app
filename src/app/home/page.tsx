@@ -6,8 +6,8 @@ import { CreatePost } from '@/components/home/CreatePost';
 import { PostCard } from '@/components/home/PostCard';
 import type { Post, User } from '@/lib/types';
 import { Separator } from '@/components/ui/separator';
-import { useEffect, useState, useCallback } from 'react';
-import { collection, onSnapshot, query, orderBy, doc, getDoc, getDocs, limit } from 'firebase/firestore';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { collection, onSnapshot, query, orderBy, doc, getDoc, getDocs, limit, startAfter, DocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, firestore } from '@/lib/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -20,11 +20,12 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { Menu, LogOut, Home as HomeIcon, Users, MessageCircle, User as UserIcon, Star, Shield } from 'lucide-react';
+import { Menu, LogOut, Home as HomeIcon, Users, MessageCircle, User as UserIcon, Star, Shield, Loader2 } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
+const POSTS_PER_PAGE = 5;
 
 export default function HomePage() {
   const [currentUser, authLoading] = useAuthState(auth);
@@ -33,7 +34,27 @@ export default function HomePage() {
   const [postsLoading, setPostsLoading] = useState(true);
   const router = useRouter();
 
-  const [isSheetOpen, setIsSheetOpen] = useState(false); // State to control sheet open/close
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  
+  // State for infinite scroll
+  const [lastPost, setLastPost] = useState<DocumentSnapshot<DocumentData> | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [postsLoadingMore, setPostsLoadingMore] = useState(false);
+  const observer = useRef<IntersectionObserver>();
+
+  const lastPostElementRef = useCallback((node: HTMLDivElement) => {
+    if (postsLoadingMore) return;
+    if (observer.current) observer.current.disconnect();
+    
+    observer.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMore) {
+        loadMorePosts();
+      }
+    });
+
+    if (node) observer.current.observe(node);
+  }, [postsLoadingMore, hasMore]);
+
 
   useEffect(() => {
     if (!authLoading && !currentUser) {
@@ -41,34 +62,61 @@ export default function HomePage() {
     }
   }, [currentUser, authLoading, router]);
 
+  const loadMorePosts = useCallback(async () => {
+    if (!hasMore || postsLoadingMore) return;
+
+    setPostsLoadingMore(true);
+    
+    try {
+        const postsRef = collection(firestore, 'posts');
+        let q;
+        if (lastPost) {
+            q = query(postsRef, orderBy('createdAt', 'desc'), startAfter(lastPost), limit(POSTS_PER_PAGE));
+        } else {
+             // This case is handled by initial load, but included for robustness
+            q = query(postsRef, orderBy('createdAt', 'desc'), limit(POSTS_PER_PAGE));
+        }
+        
+        const querySnapshot = await getDocs(q);
+        const newPostIds = querySnapshot.docs.map(doc => doc.id);
+
+        if (newPostIds.length > 0) {
+            setPostIds(prev => [...prev, ...newPostIds]);
+            setLastPost(querySnapshot.docs[querySnapshot.docs.length - 1]);
+        }
+        
+        if (querySnapshot.docs.length < POSTS_PER_PAGE) {
+            setHasMore(false);
+        }
+
+    } catch (error) {
+        console.error("Error loading more posts:", error);
+    } finally {
+        setPostsLoadingMore(false);
+    }
+  }, [lastPost, hasMore, postsLoadingMore]);
+
+
   useEffect(() => {
     if (currentUser?.uid) {
       const fetchInitialData = async () => {
         setPostsLoading(true);
-        // Fetch user profile
+        
         const userDocRef = doc(firestore, 'users', currentUser.uid);
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
           setUserProfile(userDocSnap.data() as User);
         }
 
-        // Fetch posts
         const postsRef = collection(firestore, 'posts');
-        const q = query(postsRef, orderBy('createdAt', 'desc'));
+        const q = query(postsRef, orderBy('createdAt', 'desc'), limit(POSTS_PER_PAGE));
         const querySnapshot = await getDocs(q);
         
-        let postsData = querySnapshot.docs.map(doc => doc.id);
-
-        // Shuffle the post IDs array
-        for (let i = postsData.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [postsData[i], postsData[j]] = [postsData[j], postsData[i]];
-        }
-
-        // Limit to 20 posts for faster initial load
-        postsData = postsData.slice(0, 20);
+        const postsData = querySnapshot.docs.map(doc => doc.id);
         
         setPostIds(postsData);
+        setLastPost(querySnapshot.docs[querySnapshot.docs.length - 1]);
+        setHasMore(querySnapshot.docs.length === POSTS_PER_PAGE);
         setPostsLoading(false);
       };
 
@@ -162,16 +210,25 @@ export default function HomePage() {
         <section className="mt-8">
           <div className="space-y-4">
             {postsLoading && (
-              <div className="px-4 sm:px-0">
+              <div className="px-4 space-y-4">
                 <Skeleton className="h-48 w-full" />
-                <Skeleton className="h-48 w-full mt-4" />
+                <Skeleton className="h-48 w-full" />
               </div>
             )}
-            {postIds.map((postId) => (
-              <div key={postId}>
-                <PostCard postId={postId} currentUserId={currentUser.uid} />
-              </div>
-            ))}
+            {postIds.map((postId, index) => {
+                if (index === postIds.length - 1) {
+                    return <div ref={lastPostElementRef} key={postId}><PostCard postId={postId} currentUserId={currentUser.uid} /></div>
+                }
+                return <div key={postId}><PostCard postId={postId} currentUserId={currentUser.uid} /></div>
+            })}
+             {postsLoadingMore && (
+                <div className="flex justify-center items-center p-4">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+            )}
+             {!postsLoadingMore && !hasMore && postIds.length > 0 && (
+                <p className="text-center text-muted-foreground p-4">You've reached the end!</p>
+            )}
           </div>
         </section>
       </div>
