@@ -38,7 +38,6 @@ export default function HomePage() {
   
   // State for infinite scroll
   const [lastPost, setLastPost] = useState<DocumentSnapshot<DocumentData> | null>(null);
-  const [hasMore, setHasMore] = useState(true);
   const [postsLoadingMore, setPostsLoadingMore] = useState(false);
   const observer = useRef<IntersectionObserver>();
 
@@ -47,13 +46,13 @@ export default function HomePage() {
     if (observer.current) observer.current.disconnect();
     
     observer.current = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && hasMore) {
+      if (entries[0].isIntersecting) {
         loadMorePosts();
       }
     });
 
     if (node) observer.current.observe(node);
-  }, [postsLoadingMore, hasMore]);
+  }, [postsLoadingMore]);
 
 
   useEffect(() => {
@@ -119,7 +118,6 @@ export default function HomePage() {
         
         setPostIds(postsData);
         setLastPost(querySnapshot.docs[querySnapshot.docs.length - 1]);
-        setHasMore(true); // Always true for infinite looping
         setPostsLoading(false);
       };
 
