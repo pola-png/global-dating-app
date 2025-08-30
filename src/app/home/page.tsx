@@ -4,7 +4,7 @@
 import { MainLayout } from '@/components/layout/MainLayout';
 import { CreatePost } from '@/components/home/CreatePost';
 import { PostCard } from '@/components/home/PostCard';
-import type { Post, User } from '@/lib/types';
+import type { User } from '@/lib/types';
 import { Separator } from '@/components/ui/separator';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { collection, onSnapshot, query, orderBy, doc, getDoc, getDocs, limit, startAfter, DocumentSnapshot, DocumentData } from 'firebase/firestore';
@@ -40,26 +40,6 @@ export default function HomePage() {
   const [lastPost, setLastPost] = useState<DocumentSnapshot<DocumentData> | null>(null);
   const [postsLoadingMore, setPostsLoadingMore] = useState(false);
   const observer = useRef<IntersectionObserver>();
-
-  const lastPostElementRef = useCallback((node: HTMLDivElement) => {
-    if (postsLoadingMore) return;
-    if (observer.current) observer.current.disconnect();
-    
-    observer.current = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting) {
-        loadMorePosts();
-      }
-    });
-
-    if (node) observer.current.observe(node);
-  }, [postsLoadingMore]);
-
-
-  useEffect(() => {
-    if (!authLoading && !currentUser) {
-      router.push('/login');
-    }
-  }, [currentUser, authLoading, router]);
 
   const loadMorePosts = useCallback(async () => {
     if (postsLoadingMore) return;
@@ -98,6 +78,19 @@ export default function HomePage() {
     }
   }, [lastPost, postsLoadingMore, postIds]);
 
+  const lastPostElementRef = useCallback((node: HTMLDivElement) => {
+    if (postsLoadingMore) return;
+    if (observer.current) observer.current.disconnect();
+    
+    observer.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) {
+        loadMorePosts();
+      }
+    });
+
+    if (node) observer.current.observe(node);
+  }, [postsLoadingMore, loadMorePosts]);
+
 
   useEffect(() => {
     if (currentUser?.uid) {
@@ -110,19 +103,15 @@ export default function HomePage() {
           setUserProfile(userDocSnap.data() as User);
         }
 
-        const postsRef = collection(firestore, 'posts');
-        const q = query(postsRef, orderBy('createdAt', 'desc'), limit(POSTS_PER_PAGE));
-        const querySnapshot = await getDocs(q);
+        // Initial fetch is now handled by loadMorePosts
+        await loadMorePosts();
         
-        const postsData = querySnapshot.docs.map(doc => doc.id);
-        
-        setPostIds(postsData);
-        setLastPost(querySnapshot.docs[querySnapshot.docs.length - 1]);
         setPostsLoading(false);
       };
 
       fetchInitialData();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.uid]);
 
   const handleLogout = async () => {
@@ -134,7 +123,7 @@ export default function HomePage() {
     setPostIds(prevPostIds => [newPostId, ...prevPostIds]);
   };
 
-  if (authLoading || !currentUser || !userProfile) {
+  if (authLoading || postsLoading || !currentUser || !userProfile) {
     return (
       <MainLayout>
         <div className="container mx-auto max-w-2xl px-4 py-6">
@@ -210,12 +199,6 @@ export default function HomePage() {
         </div>
         <section className="mt-8">
           <div className="space-y-4">
-            {postsLoading && (
-              <div className="px-4 space-y-4">
-                <Skeleton className="h-48 w-full" />
-                <Skeleton className="h-48 w-full" />
-              </div>
-            )}
             {postIds.map((postId, index) => {
                 if (index === postIds.length - 1) {
                     return <div ref={lastPostElementRef} key={`${postId}-${index}`}><PostCard postId={postId} currentUserId={currentUser.uid} /></div>
