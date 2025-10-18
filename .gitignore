@@ -1,0 +1,59 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+# Editor directories and files
+.vscode
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Firebase
+.firebase/
+firebase-debug.log*
+database-debug.log*
+
+# Environment variables
+.env
+.env*.local
+*.env
+*.env.*
+
+# Temporary files
+.tmp
+.cache
+
+# Functions
+functions/node_modules
+
+# Patch-package
+/patches
+.DS_Store
+
+# Ignore the functions env file that was causing issues
+.firebase/global-dating-chat/functions/.env
